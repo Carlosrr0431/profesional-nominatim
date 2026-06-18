@@ -16,6 +16,39 @@ df -h / /var/lib/postgresql/16/main /nominatim 2>/dev/null || df -h
 
 mkdir -p "${DATA_DIR}"
 
+# Railway monta el volumen en /var/lib/postgresql/16/main y crea lost+found.
+# PostgreSQL no puede initdb ahí; usamos un subdirectorio.
+setup_postgres_data_dir() {
+  local default_main="/var/lib/postgresql/16/main"
+  local pgdata="${default_main}/postgres16"
+
+  if mountpoint -q /pgdata 2>/dev/null; then
+    pgdata="/pgdata/postgres16"
+    echo "[nominatim] Volumen en /pgdata → ${pgdata}"
+  elif [ -d "${default_main}/lost+found" ]; then
+    echo "[nominatim] Volumen en ${default_main} (lost+found) → subdir ${pgdata}"
+  elif mountpoint -q "${default_main}" 2>/dev/null; then
+    echo "[nominatim] Volumen montado en ${default_main} → subdir ${pgdata}"
+  else
+    pgdata="${default_main}"
+    echo "[nominatim] Sin volumen dedicado → ${pgdata}"
+  fi
+
+  mkdir -p "${pgdata}"
+  chown -R postgres:postgres "${pgdata}" 2>/dev/null || true
+  chmod 700 "${pgdata}" 2>/dev/null || true
+
+  if ! grep -q "${pgdata}" /app/init.sh 2>/dev/null; then
+    sed -i "s|/var/lib/postgresql/16/main|${pgdata}|g" /app/init.sh /app/start.sh
+    if [ -f /etc/postgresql/16/main/postgresql.conf ]; then
+      sed -i "s|/var/lib/postgresql/16/main|${pgdata}|g" /etc/postgresql/16/main/postgresql.conf
+    fi
+    echo "[nominatim] PostgreSQL data dir: ${pgdata}"
+  fi
+}
+
+setup_postgres_data_dir
+
 # Un intento rápido (sin loop) — para URLs opcionales.
 try_once() {
   local dest="$1"
