@@ -35,6 +35,26 @@ EXPO_PUBLIC_NOMINATIM_SELF_HOSTED=true
 | RAM     | **8 GB** recomendado |
 | Volumen | `/var/lib/postgresql/16/main` obligatorio |
 
+## Descarga del mapa (mirrors)
+
+Railway **no puede** conectar a `download.geofabrik.de`. El entrypoint prueba en orden:
+
+1. `PBF_URL` (si la definís vos — recomendado si fallan todos los mirrors)
+2. GitHub Release `salta-data-v1` (requiere Actions o subida manual)
+3. **BBBike** + recorte Salta con osmium
+
+### Si GitHub Actions falla por billing
+
+Opción A — **Arreglar billing** en https://github.com/settings/billing y correr el workflow.
+
+Opción B — **Subir el PBF a Supabase Storage** (bucket público) y en Railway:
+
+```env
+PBF_URL=https://TU_PROYECTO.supabase.co/storage/v1/object/public/osm-data/salta.osm.pbf
+```
+
+Opción C — Redeploy con el último código (intenta BBBike automáticamente).
+
 ## Solución de problemas
 
 | Síntoma | Causa | Acción |

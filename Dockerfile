@@ -5,9 +5,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 ENV PORT=8080
-# Descarga Salta desde GitHub Release (Geofabrik no es alcanzable desde Railway).
-ENV PBF_URL=https://github.com/Carlosrr0431/profesional-nominatim/releases/download/salta-data-v1/salta.osm.pbf
-ENV SALTA_EXTRACT=false
+ENV SALTA_EXTRACT=true
 ENV IMPORT_WIKIPEDIA=false
 ENV IMPORT_US_TIGER=false
 ENV IMPORT_GB_POSTCODES=false
