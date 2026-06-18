@@ -8,6 +8,10 @@ PBF_SOURCE_URL="${PBF_SOURCE_URL:-https://download.geofabrik.de/south-america/ar
 SALTA_BBOX="${SALTA_BBOX:--68.75,-26.62,-62.00,-21.78}"
 USER_AGENT="${USER_AGENT:-ProfesionalApp-Nominatim/1.0}"
 
+echo "[nominatim] === Arranque $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+echo "[nominatim] Memoria:"; free -h 2>/dev/null || true
+echo "[nominatim] Disco:"; df -h / /var/lib/postgresql/16/main /nominatim 2>/dev/null || df -h
+
 mkdir -p "${DATA_DIR}"
 
 prepare_pbf() {
@@ -53,5 +57,6 @@ if [ -f /app/start.sh ]; then
   sed -i "s/--bind :8080/--bind :${LISTEN_PORT}/" /app/start.sh
 fi
 
-echo "[nominatim] API en puerto ${LISTEN_PORT}"
+echo "[nominatim] PBF_PATH=${PBF_PATH:-} PBF_URL=${PBF_URL:-}"
+echo "[nominatim] API en puerto ${LISTEN_PORT} — import puede tardar 1-3 h"
 exec /app/start.sh
