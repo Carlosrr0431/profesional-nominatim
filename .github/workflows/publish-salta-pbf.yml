@@ -1,0 +1,36 @@
+name: Publicar extracto Salta (OSM)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-salta-pbf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar osmium-tool
+        run: sudo apt-get update && sudo apt-get install -y osmium-tool curl
+
+      - name: Descargar Argentina (Geofabrik — funciona en GitHub Actions)
+        run: |
+          curl -fsSL -A "ProfesionalApp-CI/1.0" \
+            -o argentina-latest.osm.pbf \
+            "https://download.geofabrik.de/south-america/argentina-latest.osm.pbf"
+          ls -lh argentina-latest.osm.pbf
+
+      - name: Extraer provincia de Salta
+        run: |
+          osmium extract -b -68.75,-26.62,-62.00,-21.78 \
+            argentina-latest.osm.pbf -o salta.osm.pbf --overwrite
+          ls -lh salta.osm.pbf
+
+      - name: Publicar en GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: salta-data-v1
+          name: Salta OSM extract (provincia)
+          body: Extracto .osm.pbf de la provincia de Salta para Nominatim/OSRM en Railway.
+          files: salta.osm.pbf
+          make_latest: true

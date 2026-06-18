@@ -5,9 +5,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 ENV PORT=8080
-ENV SALTA_EXTRACT=true
-ENV SALTA_BBOX=-68.75,-26.62,-62.00,-21.78
-ENV PBF_SOURCE_URL=https://download.geofabrik.de/south-america/argentina-latest.osm.pbf
+# Descarga Salta desde GitHub Release (Geofabrik no es alcanzable desde Railway).
+ENV PBF_URL=https://github.com/Carlosrr0431/profesional-nominatim/releases/download/salta-data-v1/salta.osm.pbf
+ENV SALTA_EXTRACT=false
 ENV IMPORT_WIKIPEDIA=false
 ENV IMPORT_US_TIGER=false
 ENV IMPORT_GB_POSTCODES=false
@@ -17,7 +17,6 @@ ENV IMPORT_STYLE=address
 ENV USER_AGENT=ProfesionalApp-Nominatim/1.0
 ENV RAILWAY_RUN_UID=0
 
-# Tuning para Railway (el default de mediagis pide 10GB+ y provoca OOM).
 ENV POSTGRES_SHARED_BUFFERS=512MB
 ENV POSTGRES_MAINTENANCE_WORK_MEM=1GB
 ENV POSTGRES_AUTOVACUUM_WORK_MEM=256MB
