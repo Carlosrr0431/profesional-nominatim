@@ -12,8 +12,10 @@ ENV IMPORT_WIKIPEDIA=false
 ENV IMPORT_US_TIGER=false
 ENV IMPORT_GB_POSTCODES=false
 ENV FREEZE=true
-ENV THREADS=2
+ENV THREADS=1
 ENV USER_AGENT=ProfesionalApp-Nominatim/1.0
+# Evita errores de permisos al escribir en el volumen de Railway.
+ENV RAILWAY_RUN_UID=0
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

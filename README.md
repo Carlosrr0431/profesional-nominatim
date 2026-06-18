@@ -35,7 +35,15 @@ EXPO_PUBLIC_NOMINATIM_SELF_HOSTED=true
 | RAM     | **8 GB** recomendado |
 | Volumen | `/var/lib/postgresql/16/main` obligatorio |
 
-## Variables opcionales
+## Solución de problemas
+
+| Síntoma | Causa | Acción |
+|---------|-------|--------|
+| **No running instances** / 502 | Health check o crash en import | Redeploy tras quitar healthcheck; revisar **Deployments → logs** |
+| Import reinicia en loop | Poca RAM | Subir a **8 GB** en Settings → Scale |
+| Permission denied en volumen | Usuario sin permisos | Variable `RAILWAY_RUN_UID=0` (ya en Dockerfile) |
+
+**Primer deploy:** el import tarda **1–3 horas**. La consola puede mostrar "No running instances" mientras el contenedor trabaja; mirá los logs en **Deployments**, no en Console.
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
