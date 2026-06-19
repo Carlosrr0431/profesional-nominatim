@@ -85,6 +85,11 @@ download_with_retries() {
 }
 
 prepare_pbf() {
+  if [ "${FORCE_REEXTRACT:-false}" = "true" ]; then
+    echo "[nominatim] FORCE_REEXTRACT: eliminando PBF en caché..."
+    rm -f "${SALTA_PBF}" "${DATA_DIR}/argentina.osm.pbf" "${DATA_DIR}/argentina-latest.osm.pbf"
+  fi
+
   if [ -n "${PBF_PATH:-}" ] && [ -f "${PBF_PATH}" ]; then
     echo "[nominatim] Usando PBF local: ${PBF_PATH}"
     return
@@ -117,11 +122,14 @@ prepare_pbf() {
   echo "[nominatim] Release de GitHub no disponible, usando mirrors..."
   fi
 
-  # Argentina desde BBBike (Geofabrik bloqueado en Railway) + recorte Salta.
+  # Argentina desde mirrors + recorte Salta.
   local argentina="${DATA_DIR}/argentina.osm.pbf"
-  download_with_retries "${argentina}" \
-    "${MIRROR_BBBIKE}" \
-    "${MIRROR_GEOFABRIK}"
+  local mirrors=()
+  if [ -n "${PBF_SOURCE_URL:-}" ]; then
+    mirrors+=("${PBF_SOURCE_URL}")
+  fi
+  mirrors+=("${MIRROR_BBBIKE}" "${MIRROR_GEOFABRIK}")
+  download_with_retries "${argentina}" "${mirrors[@]}"
 
   echo "[nominatim] Extrayendo Salta (bbox ${SALTA_BBOX})..."
   osmium extract -b "${SALTA_BBOX}" "${argentina}" -o "${SALTA_PBF}" --overwrite
@@ -133,6 +141,12 @@ prepare_pbf() {
 }
 
 prepare_pbf
+
+if [ "${FORCE_REIMPORT:-false}" = "true" ]; then
+  echo "[nominatim] FORCE_REIMPORT: eliminando base PostgreSQL..."
+  rm -rf /var/lib/postgresql/16/main/postgres16/* 2>/dev/null || true
+  rm -rf /pgdata/postgres16/* 2>/dev/null || true
+fi
 
 if [ -f /app/start.sh ]; then
   sed -i "s/--bind :8080/--bind :${LISTEN_PORT}/" /app/start.sh
