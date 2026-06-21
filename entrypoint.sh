@@ -140,7 +140,37 @@ prepare_pbf() {
   unset PBF_URL
 }
 
+postgres_has_data() {
+  for dir in /var/lib/postgresql/16/main/postgres16 /pgdata/postgres16 /var/lib/postgresql/16/main; do
+    if [ -d "${dir}/base" ] && [ -n "$(ls -A "${dir}/base" 2>/dev/null || true)" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+configure_postgres_memory() {
+  if postgres_has_data && [ "${FORCE_REIMPORT:-false}" != "true" ]; then
+    echo "[nominatim] Base existente: perfil PostgreSQL de bajo consumo (runtime)."
+    export POSTGRES_SHARED_BUFFERS="${POSTGRES_SHARED_BUFFERS:-256MB}"
+    export POSTGRES_MAINTENANCE_WORK_MEM="${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}"
+    export POSTGRES_AUTOVACUUM_WORK_MEM="${POSTGRES_AUTOVACUUM_WORK_MEM:-64MB}"
+    export POSTGRES_WORK_MEM="${POSTGRES_WORK_MEM:-16MB}"
+    export POSTGRES_EFFECTIVE_CACHE_SIZE="${POSTGRES_EFFECTIVE_CACHE_SIZE:-768MB}"
+    export THREADS="${THREADS:-1}"
+  else
+    echo "[nominatim] Importación pendiente: perfil PostgreSQL moderado."
+    export POSTGRES_SHARED_BUFFERS="${POSTGRES_SHARED_BUFFERS:-512MB}"
+    export POSTGRES_MAINTENANCE_WORK_MEM="${POSTGRES_MAINTENANCE_WORK_MEM:-512MB}"
+    export POSTGRES_AUTOVACUUM_WORK_MEM="${POSTGRES_AUTOVACUUM_WORK_MEM:-128MB}"
+    export POSTGRES_WORK_MEM="${POSTGRES_WORK_MEM:-32MB}"
+    export POSTGRES_EFFECTIVE_CACHE_SIZE="${POSTGRES_EFFECTIVE_CACHE_SIZE:-1536MB}"
+    export THREADS="${THREADS:-2}"
+  fi
+}
+
 prepare_pbf
+configure_postgres_memory
 
 if [ "${FORCE_REIMPORT:-false}" = "true" ]; then
   echo "[nominatim] FORCE_REIMPORT: eliminando base PostgreSQL..."
