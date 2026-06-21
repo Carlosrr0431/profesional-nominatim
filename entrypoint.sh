@@ -85,9 +85,16 @@ download_with_retries() {
 }
 
 prepare_pbf() {
+  local reextract_marker="${DATA_DIR}/.force-reextract-applied"
+
   if [ "${FORCE_REEXTRACT:-false}" = "true" ]; then
-    echo "[nominatim] FORCE_REEXTRACT: eliminando PBF en caché..."
-    rm -f "${SALTA_PBF}" "${DATA_DIR}/argentina.osm.pbf" "${DATA_DIR}/argentina-latest.osm.pbf"
+    if [ -f "${reextract_marker}" ] && [ -f "${SALTA_PBF}" ]; then
+      echo "[nominatim] FORCE_REEXTRACT ya aplicado (${SALTA_PBF} existe). Desactivá FORCE_REEXTRACT en Railway."
+    else
+      echo "[nominatim] FORCE_REEXTRACT: eliminando PBF en caché (una sola vez)..."
+      rm -f "${SALTA_PBF}" "${DATA_DIR}/argentina.osm.pbf" "${DATA_DIR}/argentina-latest.osm.pbf"
+      rm -f "${reextract_marker}"
+    fi
   fi
 
   if [ -n "${PBF_PATH:-}" ] && [ -f "${PBF_PATH}" ]; then
@@ -107,6 +114,7 @@ prepare_pbf() {
     download_with_retries "${SALTA_PBF}" "${PBF_URL}"
     export PBF_PATH="${SALTA_PBF}"
     unset PBF_URL
+    touch "${DATA_DIR}/.force-reextract-applied"
     return
   fi
 
@@ -115,6 +123,7 @@ prepare_pbf() {
   if try_once "${SALTA_PBF}" "${GITHUB_SALTA_PBF_URL}" 2>/dev/null; then
     export PBF_PATH="${SALTA_PBF}"
     unset PBF_URL
+    touch "${DATA_DIR}/.force-reextract-applied"
     echo "[nominatim] Usando Release de GitHub"
     return
   fi
@@ -133,6 +142,7 @@ prepare_pbf() {
 
   echo "[nominatim] Extrayendo Salta (bbox ${SALTA_BBOX})..."
   osmium extract -b "${SALTA_BBOX}" "${argentina}" -o "${SALTA_PBF}" --overwrite
+  touch "${DATA_DIR}/.force-reextract-applied"
   if [ "${KEEP_ARGENTINA_PBF:-false}" != "true" ]; then
     rm -f "${argentina}"
   fi
@@ -172,10 +182,16 @@ configure_postgres_memory() {
 prepare_pbf
 configure_postgres_memory
 
+REIMPORT_MARKER="${DATA_DIR}/.force-reimport-applied"
 if [ "${FORCE_REIMPORT:-false}" = "true" ]; then
-  echo "[nominatim] FORCE_REIMPORT: eliminando base PostgreSQL..."
-  rm -rf /var/lib/postgresql/16/main/postgres16/* 2>/dev/null || true
-  rm -rf /pgdata/postgres16/* 2>/dev/null || true
+  if [ -f "${REIMPORT_MARKER}" ]; then
+    echo "[nominatim] FORCE_REIMPORT ya ejecutado. Desactivá FORCE_REIMPORT en Railway o borrá ${REIMPORT_MARKER}."
+  else
+    echo "[nominatim] FORCE_REIMPORT: eliminando base PostgreSQL (una sola vez)..."
+    rm -rf /var/lib/postgresql/16/main/postgres16/* 2>/dev/null || true
+    rm -rf /pgdata/postgres16/* 2>/dev/null || true
+    touch "${REIMPORT_MARKER}"
+  fi
 fi
 
 if [ -f /app/start.sh ]; then
