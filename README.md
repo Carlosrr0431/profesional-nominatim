@@ -1,22 +1,59 @@
 # profesional-nominatim
 
-Servidor de geocodificación **Nominatim** para ProfesionalApp (Salta, Argentina).  
-Despliegue en [Railway](https://railway.app) — **sin pasos locales**.
+Geocodificación **Nominatim** para ProfesionalApp (Salta).  
+El dashboard usa **Google Places** para POIs; Nominatim cubre **calle + altura** y fallback OSM.
 
-## Railway (5 minutos)
+## Costos en Railway (optimizado)
 
-1. Creá un repo vacío en GitHub: `profesional-nominatim`
-2. Subí este código (`git push`)
-3. En Railway → **New Project** → **Deploy from GitHub** → elegí `profesional-nominatim`
-4. **Volumes** → montá **`/pgdata`** (10 GB+) — o dejá `/var/lib/postgresql/16/main` (el entrypoint usa subdirectorio `postgres16`)
-5. **Variables** → `NOMINATIM_PASSWORD` = contraseña segura
-6. **Networking** → **Generate Domain**
-7. Primer deploy: **1–3 horas** de import. No reinicies hasta que `/status` responda.
+| Ajuste | Valor runtime | Ahorro |
+|--------|---------------|--------|
+| Scale → Memory | **1.5 GB** (railway.toml) | Evita picos de 4 GB |
+| Scale → CPU | **1 vCPU** | |
+| **Serverless** | Activar en Deploy | ~70–85 % si hay poco tráfico |
+| PostgreSQL tunado | 128 MB shared_buffers | Baja ~2 GB → ~1 GB |
+| `GUNICORN_WORKERS` | `1` | Menos procesos API |
+| `IMPORT_STYLE` | `address` (no `full`) | Base más chica (requiere reimport) |
+
+### Variables recomendadas (runtime)
+
+```env
+NOMINATIM_PASSWORD=tu-secreto
+FORCE_REIMPORT=false
+FORCE_REEXTRACT=false
+GUNICORN_WORKERS=1
+WARMUP_ON_STARTUP=false
+```
+
+### Reducir aún más (opcional, requiere reimport ~1–2 h)
+
+Solo Salta Capital + estilo `address` (suficiente con Google para comercios):
+
+```env
+IMPORT_REGION=capital
+IMPORT_STYLE=address
+FORCE_REIMPORT=true
+```
+
+Subir Memory a **4 GB** solo durante el import; luego volver a **1.5 GB** y `FORCE_REIMPORT=false`.
+
+### PBF sin osmium en Railway
+
+```env
+PBF_URL=https://TU_PROYECTO.supabase.co/storage/v1/object/public/osm-data/salta.osm.pbf
+```
+
+## Railway rápido
+
+1. Repo `profesional-nominatim` → Railway
+2. Volumen **`/pgdata`** (5–10 GB)
+3. `NOMINATIM_PASSWORD`
+4. **Serverless ON**
+5. Scale: **1.5 GB RAM**, **1 vCPU**
 
 ## Probar
 
 ```http
-GET https://TU-URL.up.railway.app/search?q=Belgrano+1200+Salta&format=jsonv2
+GET https://TU-URL.up.railway.app/search?q=Belgrano+1200+Salta&format=jsonv2&limit=3
 GET https://TU-URL.up.railway.app/status
 ```
 
@@ -24,48 +61,5 @@ GET https://TU-URL.up.railway.app/status
 
 ```env
 EXPO_PUBLIC_NOMINATIM_URL=https://TU-URL.up.railway.app
-EXPO_PUBLIC_NOMINATIM_USER_AGENT=ProfesionalConductorDriverApp/1.0
 EXPO_PUBLIC_NOMINATIM_SELF_HOSTED=true
 ```
-
-## Requisitos
-
-| Recurso | Valor |
-|---------|-------|
-| RAM     | **8 GB** recomendado |
-| Volumen | `/pgdata` recomendado (10 GB+) |
-
-## Descarga del mapa (mirrors)
-
-Railway **no puede** conectar a `download.geofabrik.de`. El entrypoint prueba en orden:
-
-1. `PBF_URL` (si la definís vos — recomendado si fallan todos los mirrors)
-2. GitHub Release `salta-data-v1` (requiere Actions o subida manual)
-3. **BBBike** + recorte Salta con osmium
-
-### Si GitHub Actions falla por billing
-
-Opción A — **Arreglar billing** en https://github.com/settings/billing y correr el workflow.
-
-Opción B — **Subir el PBF a Supabase Storage** (bucket público) y en Railway:
-
-```env
-PBF_URL=https://TU_PROYECTO.supabase.co/storage/v1/object/public/osm-data/salta.osm.pbf
-```
-
-Opción C — Redeploy con el último código (intenta BBBike automáticamente).
-
-## Solución de problemas
-
-| Síntoma | Causa | Acción |
-|---------|-------|--------|
-| **No running instances** / 502 | Health check o crash en import | Redeploy tras quitar healthcheck; revisar **Deployments → logs** |
-| Import reinicia en loop | Poca RAM | Subir a **8 GB** en Settings → Scale |
-| `initdb: directory exists but is not empty` / `lost+found` | Volumen montado en raíz de PG | Redeploy con último código (usa subdir `postgres16`) |
-
-**Primer deploy:** el import tarda **1–3 horas**. La consola puede mostrar "No running instances" mientras el contenedor trabaja; mirá los logs en **Deployments**, no en Console.
-
-| Variable | Default | Descripción |
-|----------|---------|-------------|
-| `THREADS` | `2` | Hilos de import |
-| `SALTA_BBOX` | provincia Salta | Bbox osmium |

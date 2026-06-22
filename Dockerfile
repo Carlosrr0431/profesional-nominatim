@@ -5,21 +5,21 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 ENV PORT=8080
+ENV IMPORT_REGION=salta
 ENV SALTA_EXTRACT=true
+ENV SALTA_BBOX=-68.75,-26.62,-62.00,-21.78
+ENV CAPITAL_BBOX=-65.55,-24.90,-65.30,-24.70
 ENV IMPORT_WIKIPEDIA=false
 ENV IMPORT_US_TIGER=false
 ENV IMPORT_GB_POSTCODES=false
 ENV FREEZE=true
-ENV THREADS=1
-ENV IMPORT_STYLE=full
+ENV WARMUP_ON_STARTUP=false
+# address = calles y alturas (POIs los resuelve Google Places en el dashboard)
+ENV IMPORT_STYLE=address
 ENV USER_AGENT=ProfesionalApp-Nominatim/1.0
 ENV RAILWAY_RUN_UID=0
-
-ENV POSTGRES_SHARED_BUFFERS=512MB
-ENV POSTGRES_MAINTENANCE_WORK_MEM=1GB
-ENV POSTGRES_AUTOVACUUM_WORK_MEM=256MB
-ENV POSTGRES_WORK_MEM=32MB
-ENV POSTGRES_EFFECTIVE_CACHE_SIZE=2GB
+ENV GUNICORN_WORKERS=1
+# POSTGRES_*: los fija entrypoint.sh (no poner defaults altos acá)
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

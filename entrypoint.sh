@@ -3,9 +3,27 @@ set -euo pipefail
 
 LISTEN_PORT="${PORT:-8080}"
 DATA_DIR="/nominatim/data"
-SALTA_PBF="${DATA_DIR}/salta.osm.pbf"
+IMPORT_REGION="${IMPORT_REGION:-salta}"
 SALTA_BBOX="${SALTA_BBOX:--68.75,-26.62,-62.00,-21.78}"
+CAPITAL_BBOX="${CAPITAL_BBOX:--65.55,-24.90,-65.30,-24.70}"
 USER_AGENT="${USER_AGENT:-ProfesionalApp-Nominatim/1.0 (contacto@profesional.app)}"
+PG_TUNING_CONF="/etc/postgresql/16/main/conf.d/postgres-tuning.conf"
+
+region_pbf_path() {
+  case "${IMPORT_REGION}" in
+    capital) echo "${DATA_DIR}/salta-capital.osm.pbf" ;;
+    *) echo "${DATA_DIR}/salta.osm.pbf" ;;
+  esac
+}
+
+region_bbox() {
+  case "${IMPORT_REGION}" in
+    capital) echo "${CAPITAL_BBOX}" ;;
+    *) echo "${SALTA_BBOX}" ;;
+  esac
+}
+
+SALTA_PBF="$(region_pbf_path)"
 
 MIRROR_BBBIKE="https://download3.bbbike.org/osm/pbf/region/south-america/argentina.osm.pbf"
 MIRROR_GEOFABRIK="https://download.geofabrik.de/south-america/argentina-latest.osm.pbf"
@@ -140,8 +158,8 @@ prepare_pbf() {
   mirrors+=("${MIRROR_BBBIKE}" "${MIRROR_GEOFABRIK}")
   download_with_retries "${argentina}" "${mirrors[@]}"
 
-  echo "[nominatim] Extrayendo Salta (bbox ${SALTA_BBOX})..."
-  osmium extract -b "${SALTA_BBOX}" "${argentina}" -o "${SALTA_PBF}" --overwrite
+  echo "[nominatim] Extrayendo ${IMPORT_REGION} (bbox $(region_bbox))..."
+  osmium extract -b "$(region_bbox)" "${argentina}" -o "${SALTA_PBF}" --overwrite
   touch "${DATA_DIR}/.force-reextract-applied"
   if [ "${KEEP_ARGENTINA_PBF:-false}" != "true" ]; then
     rm -f "${argentina}"
@@ -160,23 +178,42 @@ postgres_has_data() {
 }
 
 configure_postgres_memory() {
+  export GUNICORN_WORKERS="1"
+  export WARMUP_ON_STARTUP="false"
+
   if postgres_has_data && [ "${FORCE_REIMPORT:-false}" != "true" ]; then
-    echo "[nominatim] Base existente: perfil PostgreSQL de bajo consumo (runtime)."
-    export POSTGRES_SHARED_BUFFERS="${POSTGRES_SHARED_BUFFERS:-256MB}"
-    export POSTGRES_MAINTENANCE_WORK_MEM="${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}"
-    export POSTGRES_AUTOVACUUM_WORK_MEM="${POSTGRES_AUTOVACUUM_WORK_MEM:-64MB}"
-    export POSTGRES_WORK_MEM="${POSTGRES_WORK_MEM:-16MB}"
-    export POSTGRES_EFFECTIVE_CACHE_SIZE="${POSTGRES_EFFECTIVE_CACHE_SIZE:-768MB}"
-    export THREADS="${THREADS:-1}"
+    echo "[nominatim] Base existente: perfil PostgreSQL mínimo (runtime ~1 GB)."
+    export POSTGRES_SHARED_BUFFERS="128MB"
+    export POSTGRES_MAINTENANCE_WORK_MEM="64MB"
+    export POSTGRES_AUTOVACUUM_WORK_MEM="32MB"
+    export POSTGRES_WORK_MEM="8MB"
+    export POSTGRES_EFFECTIVE_CACHE_SIZE="384MB"
+    export POSTGRES_MAX_CONNECTIONS="20"
+    export THREADS="1"
+    patch_postgres_tuning_conf
   else
     echo "[nominatim] Importación pendiente: perfil PostgreSQL moderado."
-    export POSTGRES_SHARED_BUFFERS="${POSTGRES_SHARED_BUFFERS:-512MB}"
-    export POSTGRES_MAINTENANCE_WORK_MEM="${POSTGRES_MAINTENANCE_WORK_MEM:-512MB}"
-    export POSTGRES_AUTOVACUUM_WORK_MEM="${POSTGRES_AUTOVACUUM_WORK_MEM:-128MB}"
-    export POSTGRES_WORK_MEM="${POSTGRES_WORK_MEM:-32MB}"
-    export POSTGRES_EFFECTIVE_CACHE_SIZE="${POSTGRES_EFFECTIVE_CACHE_SIZE:-1536MB}"
-    export THREADS="${THREADS:-2}"
+    export POSTGRES_SHARED_BUFFERS="512MB"
+    export POSTGRES_MAINTENANCE_WORK_MEM="512MB"
+    export POSTGRES_AUTOVACUUM_WORK_MEM="128MB"
+    export POSTGRES_WORK_MEM="32MB"
+    export POSTGRES_EFFECTIVE_CACHE_SIZE="1536MB"
+    export POSTGRES_MAX_CONNECTIONS="30"
+    export THREADS="2"
   fi
+}
+
+patch_postgres_tuning_conf() {
+  [ -f "${PG_TUNING_CONF}" ] || return 0
+  sed -i \
+    -e 's/^shared_buffers = .*/shared_buffers = 128MB/' \
+    -e 's/^maintenance_work_mem = .*/maintenance_work_mem = 64MB/' \
+    -e 's/^autovacuum_work_mem = .*/autovacuum_work_mem = 32MB/' \
+    -e 's/^work_mem = .*/work_mem = 8MB/' \
+    -e 's/^effective_cache_size = .*/effective_cache_size = 384MB/' \
+    -e 's/^max_connections = .*/max_connections = 20/' \
+    "${PG_TUNING_CONF}" 2>/dev/null || true
+  echo "[nominatim] ${PG_TUNING_CONF} actualizado para bajo consumo."
 }
 
 prepare_pbf
