@@ -8,6 +8,7 @@ SALTA_BBOX="${SALTA_BBOX:--68.75,-26.62,-62.00,-21.78}"
 CAPITAL_BBOX="${CAPITAL_BBOX:--65.55,-24.90,-65.30,-24.70}"
 USER_AGENT="${USER_AGENT:-ProfesionalApp-Nominatim/1.0 (contacto@profesional.app)}"
 PG_TUNING_CONF="/etc/postgresql/16/main/conf.d/postgres-tuning.conf"
+BACKEND_PORT="${NOMINATIM_BACKEND_PORT:-8081}"
 
 region_pbf_path() {
   case "${IMPORT_REGION}" in
@@ -34,8 +35,6 @@ df -h / /var/lib/postgresql/16/main /nominatim 2>/dev/null || df -h
 
 mkdir -p "${DATA_DIR}"
 
-# Railway monta el volumen en /var/lib/postgresql/16/main y crea lost+found.
-# PostgreSQL no puede initdb ahí; usamos un subdirectorio.
 setup_postgres_data_dir() {
   local default_main="/var/lib/postgresql/16/main"
   local pgdata="${default_main}/postgres16"
@@ -67,7 +66,6 @@ setup_postgres_data_dir() {
 
 setup_postgres_data_dir
 
-# Un intento rápido (sin loop) — para URLs opcionales.
 try_once() {
   local dest="$1"
   local url="$2"
@@ -75,7 +73,6 @@ try_once() {
   curl -fsSL -A "${USER_AGENT}" --connect-timeout 30 --max-time 7200 -o "${dest}" "${url}"
 }
 
-# Reintentos largos — solo para mirrors principales.
 download_with_retries() {
   local dest="$1"
   shift
@@ -127,7 +124,6 @@ prepare_pbf() {
     return
   fi
 
-  # URL explícita (Supabase, Release manual, etc.)
   if [ -n "${PBF_URL:-}" ]; then
     download_with_retries "${SALTA_PBF}" "${PBF_URL}"
     export PBF_PATH="${SALTA_PBF}"
@@ -136,20 +132,18 @@ prepare_pbf() {
     return
   fi
 
-  # Release de GitHub: solo 1 intento (suele no existir si Actions está bloqueado).
   if [ -n "${GITHUB_SALTA_PBF_URL:-}" ]; then
-  if try_once "${SALTA_PBF}" "${GITHUB_SALTA_PBF_URL}" 2>/dev/null; then
-    export PBF_PATH="${SALTA_PBF}"
-    unset PBF_URL
-    touch "${DATA_DIR}/.force-reextract-applied"
-    echo "[nominatim] Usando Release de GitHub"
-    return
-  fi
-  rm -f "${SALTA_PBF}"
-  echo "[nominatim] Release de GitHub no disponible, usando mirrors..."
+    if try_once "${SALTA_PBF}" "${GITHUB_SALTA_PBF_URL}" 2>/dev/null; then
+      export PBF_PATH="${SALTA_PBF}"
+      unset PBF_URL
+      touch "${DATA_DIR}/.force-reextract-applied"
+      echo "[nominatim] Usando Release de GitHub"
+      return
+    fi
+    rm -f "${SALTA_PBF}"
+    echo "[nominatim] Release de GitHub no disponible, usando mirrors..."
   fi
 
-  # Argentina desde mirrors + recorte Salta.
   local argentina="${DATA_DIR}/argentina.osm.pbf"
   local mirrors=()
   if [ -n "${PBF_SOURCE_URL:-}" ]; then
@@ -231,10 +225,30 @@ if [ "${FORCE_REIMPORT:-false}" = "true" ]; then
   fi
 fi
 
-if [ -f /app/start.sh ]; then
-  sed -i "s/--bind :8080/--bind :${LISTEN_PORT}/" /app/start.sh
-fi
+configure_bind_port() {
+  local bind_target="$1"
+  if [ -f /app/start.sh ]; then
+    sed -i "s|--bind :8080|--bind ${bind_target}|" /app/start.sh
+  fi
+}
 
 echo "[nominatim] PBF_PATH=${PBF_PATH:-}"
-echo "[nominatim] API en puerto ${LISTEN_PORT}"
+
+if [ "${CACHE_ENABLED:-true}" = "true" ]; then
+  configure_bind_port "127.0.0.1:${BACKEND_PORT}"
+  echo "[nominatim] Nominatim interno en 127.0.0.1:${BACKEND_PORT}; nginx con caché en puerto ${LISTEN_PORT}"
+  /app/start.sh &
+
+  NGINX_PORT="${LISTEN_PORT}" \
+  BACKEND_PORT="${BACKEND_PORT}" \
+  NGINX_MAIN_CONF=/etc/nginx/nginx.conf \
+  NGINX_SITE_TEMPLATE=/etc/nginx/templates/site.conf.template \
+  CACHE_DIR="${DATA_DIR}/nginx-cache" \
+  HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/status" \
+  WAIT_ITERATIONS=150 \
+  exec /usr/local/bin/start-nginx-cache.sh nominatim
+fi
+
+configure_bind_port ":${LISTEN_PORT}"
+echo "[nominatim] API sin caché HTTP en puerto ${LISTEN_PORT}"
 exec /app/start.sh
