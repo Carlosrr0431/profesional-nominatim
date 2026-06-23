@@ -23,7 +23,7 @@ server {
     proxy_cache nominatim_geo;
     proxy_cache_methods GET HEAD;
     proxy_cache_key "$request_uri";
-    proxy_cache_valid 200 30m;
+    proxy_cache_valid 200 4h;
     proxy_cache_valid 404 5m;
     proxy_cache_valid 500 502 503 504 0;
     proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
